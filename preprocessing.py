@@ -100,6 +100,9 @@ def check_validity(smi):
             print('invalid chemistry')
             return False
         
+# for mol in df['SMILES']:
+#     check_validity(mol)
+        
 def split_dataset_by_scaffold_and_similarity(df):
     '''Based on scaffold and stratification: it takes the least similar scaffold and put aside in validation set, 
         the rest split with taking into account distribution of scaffolds, the single instances goes to train'''
@@ -136,3 +139,97 @@ def split_dataset_by_scaffold_and_similarity(df):
 
     train_set = pd.concat([train_set, single_instance_df])
     return train_set, test_set, validation_set
+
+
+def random_splitter(df):
+
+    train_df, temp_test_df = train_test_split(df, train_size=0.8, random_state=42, shuffle=True)
+
+    val_df, test_df = train_test_split(temp_test_df, test_size=0.5, random_state=42, shuffle=True)
+
+    return train_df, test_df, val_df
+
+
+def check_leakage(train_set, test_set, validation_set):
+    train_indices = set(train_set.index)
+    test_indices = set(test_set.index)
+    validation_indices = set(validation_set.index)
+
+    train_test_overlap = train_indices.intersection(test_indices)
+    train_validation_overlap = train_indices.intersection(validation_indices)
+    test_validation_overlap = test_indices.intersection(validation_indices)
+
+    # Print the results
+    print("Overlap between train and test sets:", train_test_overlap)
+    print("Overlap between train and validation sets:", train_validation_overlap)
+    print("Overlap between test and validation sets:", test_validation_overlap)
+
+    assert len(train_test_overlap) == 0, "There is an overlap between train and test sets."
+    assert len(train_validation_overlap) == 0, "There is an overlap between train and validation sets."
+    assert len(test_validation_overlap) == 0, "There is an overlap between test and validation sets."
+
+    print("All sets are unique with no overlap.")
+
+
+def generate_morgan_count(df, smiles_col='SMILES', radius=2):
+    """
+    Generates Morgan count descriptors for a dataframe containing SMILES structures.
+
+    Parameters:
+    - df: DataFrame containing SMILES strings.
+    - smiles_col: Name of the column containing SMILES strings.
+    - radius: The radius of the Morgan fingerprints.
+
+    Returns:
+    - DataFrame with Morgan count descriptors added.
+    """
+
+    morgan_descriptors = []
+
+    for index, row in df.iterrows():
+
+        mol = Chem.MolFromSmiles(row[smiles_col])
+        
+        fp = AllChem.GetMorganFingerprint(mol, radius=radius, useCounts=True)
+        
+        fp_dict = fp.GetNonzeroElements()
+        
+        morgan_descriptors.append(fp_dict)
+    
+    fp_df = pd.DataFrame(morgan_descriptors)
+    fp_df = fp_df.fillna(0).astype(int)
+    result_df = pd.concat([df, fp_df], axis=1)
+    
+    return result_df
+
+
+def find_intramolecular_hbonds(mol, confId=-1, eligibleAtoms=[7,8], distTol=2.5):
+    """
+    mol: RDKit molecule object
+    confId: Conformer ID to use for distance calculation
+    eligibleAtoms: List of atomic numbers for eligible H-bond donors or acceptors (N and O by default)
+    distTol: Maximum accepted distance (in Ångströms) for an H-bond
+    """
+    res = []
+    conf = mol.GetConformer(confId)
+    for i in range(mol.GetNumAtoms()):
+        atomi = mol.GetAtomWithIdx(i)
+        if atomi.GetAtomicNum() == 1:  # Check if it is a hydrogen atom
+            for j in range(mol.GetNumAtoms()):
+                atomj = mol.GetAtomWithIdx(j)
+                if atomj.GetAtomicNum() in eligibleAtoms:
+                    d = conf.GetAtomPosition(i).Distance(conf.GetAtomPosition(j))
+                    if d <= distTol:
+                        res.append((i, j, d))
+    return res
+
+def hbonds(find_intramolecular_hbonds, smiles, num_of_conformers):
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.AddHs(mol)
+
+    num_conformers = num_of_conformers
+    AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, randomSeed=1)
+
+    for confId in range(num_conformers):
+        hbonds = find_intramolecular_hbonds(mol, confId=confId)
+        print(f"Conformer {confId}: {hbonds} intramolecular hydrogen bonds found.")
