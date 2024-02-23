@@ -6,6 +6,10 @@ from rdkit.Chem.Scaffolds.MurckoScaffold import MurckoScaffoldSmiles, MurckoScaf
 from rdkit.Chem import AllChem, DataStructs
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from rdkit.Chem.rdMolDescriptors import CalcWHIM
+from rdkit.Chem import Descriptors
+import numpy as np
+from scipy.spatial.distance import cdist
 
 def preprocess_peptide_data_basic():
     '''if there are duplicates, it takes the assay from the latest paper'''
@@ -150,6 +154,55 @@ def random_splitter(df):
     return train_df, test_df, val_df
 
 
+def kennard_stone_percentage_split(df, smiles_col, percentage):
+    """
+    Splits the dataset into two DataFrames using the Kennard-Stone algorithm,
+    automatically identifying descriptor columns and based on a percentage.
+    
+    Parameters:
+    - df: DataFrame containing the dataset with descriptors and a SMILES column.
+    - smiles_col: The name of the column containing the SMILES strings.
+    - percentage: The percentage of samples to select.
+    
+    Returns:
+    - selected_df: DataFrame with the selected samples.
+    - remaining_df: DataFrame with the remaining samples.
+    """
+    
+    # Identify descriptor columns (numeric columns excluding the SMILES column)
+    descriptor_cols = df.select_dtypes(include=[np.number]).columns.drop(smiles_col, errors='ignore')
+    
+    # Extract the descriptor matrix
+    x_variables = df[descriptor_cols].values
+    original_x = x_variables.copy()
+    
+    # Calculate the number of samples to select based on the percentage
+    num_samples = int(len(df) * percentage)
+    
+    # Calculate the Euclidean distance to the mean
+    distance_to_average = np.sum((x_variables - np.mean(x_variables, axis=0))**2, axis=1)
+    max_distance_index = np.argmax(distance_to_average)
+    selected_indices = [max_distance_index]
+    
+    for _ in range(1, num_samples):
+        remaining_indices = list(set(range(len(x_variables))) - set(selected_indices))
+        selected_descriptors = original_x[selected_indices, :]
+        remaining_descriptors = original_x[remaining_indices, :]
+        
+        distances = cdist(remaining_descriptors, selected_descriptors, 'euclidean')
+        min_distances = np.min(distances, axis=1)
+        max_min_distance_index = np.argmax(min_distances)
+        
+        selected_indices.append(remaining_indices[max_min_distance_index])
+    
+    # Create DataFrames for selected and remaining samples
+    selected_df = df.iloc[selected_indices].reset_index(drop=True)
+    remaining_indices = list(set(range(len(df))) - set(selected_indices))
+    remaining_df = df.iloc[remaining_indices].reset_index(drop=True)
+    
+    return selected_df, remaining_df
+
+
 def check_leakage(train_set, test_set, validation_set):
     train_indices = set(train_set.index)
     test_indices = set(test_set.index)
@@ -232,4 +285,67 @@ def hbonds(find_intramolecular_hbonds, smiles, num_of_conformers):
 
     for confId in range(num_conformers):
         hbonds = find_intramolecular_hbonds(mol, confId=confId)
-        print(f"Conformer {confId}: {hbonds} intramolecular hydrogen bonds found.")
+        #print(f"Conformer {confId}: {len(hbonds)} intramolecular hydrogen bonds found.")
+    #return len(hbonds)  # TODO Fix the output 
+
+def generate_3d_descriptors(df, smiles_col):
+    """
+    Function to generate 3D descriptors for a DataFrame of SMILES strings.
+    
+    Parameters:
+    - df: DataFrame containing the SMILES strings.
+    - smiles_col: The name of the column containing the SMILES strings.
+    
+    Returns:
+    - DataFrame with the original data and new columns for WHIM descriptors.
+    """
+    
+    # Define a helper function to process each SMILES string
+    def process_smiles(smiles):
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            mol = Chem.AddHs(mol)  
+            AllChem.EmbedMolecule(mol, randomSeed=0xf00d)  
+            AllChem.MMFFOptimizeMolecule(mol)  
+            whim_descriptors = CalcWHIM(mol)  
+            return whim_descriptors
+        except:
+            return [None] * 114  
+    
+    whim_results = df[smiles_col].apply(process_smiles)
+    
+
+    whim_df = pd.DataFrame(whim_results.tolist(), columns=[f'WHIM_{i}' for i in range(114)])
+    result_df = pd.concat([df, whim_df], axis=1)
+    
+    return result_df
+
+def add_molecular_descriptors(df, smiles_col):
+    """
+    Function to add molecular descriptors for a DataFrame of SMILES strings using RDKit.
+    
+    Parameters:
+    - df: DataFrame containing the SMILES strings.
+    - smiles_col: The name of the column containing the SMILES strings.
+    
+    Returns:
+    - DataFrame with the original data and new columns for molecular descriptors.
+    """
+
+    def calculate_descriptors(smiles):
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:  
+                return [None] * len(Descriptors._descList)  
+            return Descriptors.CalcMolDescriptors(mol)
+        except:
+            return [None] * len(Descriptors._descList)  
+    
+    descriptor_results = df[smiles_col].apply(calculate_descriptors)
+    
+    descriptor_names = [desc[0] for desc in Descriptors._descList]
+    
+    descriptors_df = pd.DataFrame(descriptor_results.tolist(), columns=descriptor_names)
+    result_df = pd.concat([df, descriptors_df], axis=1)
+    
+    return result_df
