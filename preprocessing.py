@@ -11,6 +11,7 @@ from rdkit.Chem import Descriptors
 import numpy as np
 from scipy.spatial.distance import cdist
 from rdkit.Chem import rdMolDescriptors
+from concurrent.futures import ProcessPoolExecutor
 
 def preprocess_peptide_data_basic():
     '''if there are duplicates, it takes the assay from the latest paper'''
@@ -318,98 +319,105 @@ def add_molecular_descriptors(df, smiles_col):
     
     return result_df
 
-def get_chameleonicity_like_descriptor(df):
-    def IMHB_var(smiles):
-        def find_intramolecular_hbonds(mol, confId=-1, eligibleAtoms=[7,8], distTol=2.5):
-            """
-            mol: RDKit molecule object
-            confId: Conformer ID to use for distance calculation
-            eligibleAtoms: List of atomic numbers for eligible H-bond donors or acceptors (N and O by default)
-            distTol: Maximum accepted distance (in Ångströms) for an H-bond
-            """
-            res = []
-            conf = mol.GetConformer(confId)
-            for i in range(mol.GetNumAtoms()):
-                atomi = mol.GetAtomWithIdx(i)
-                if atomi.GetAtomicNum() == 1:  
-                    for j in range(mol.GetNumAtoms()):
-                        atomj = mol.GetAtomWithIdx(j)
-                        if atomj.GetAtomicNum() in eligibleAtoms:
-                            d = conf.GetAtomPosition(i).Distance(conf.GetAtomPosition(j))
-                            if d <= distTol:
-                                res.append((i, j, d))
-            return res
+def parallelize_dataframe_computation(df, function, n_workers=4):
+    smiles_list = df['SMILES'].to_list()
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        results = list(executor.map(function, smiles_list))
+    return results
 
-        def calc_rotatable_bonds(smiles):
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is not None:  
-                return rdMolDescriptors.CalcNumRotatableBonds(mol)
-            else:
-                return None
+def IMHB_var(smiles):
+    def find_intramolecular_hbonds(mol, confId=-1, eligibleAtoms=[7,8], distTol=2.5):
+        """
+        mol: RDKit molecule object
+        confId: Conformer ID to use for distance calculation
+        eligibleAtoms: List of atomic numbers for eligible H-bond donors or acceptors (N and O by default)
+        distTol: Maximum accepted distance (in Ångströms) for an H-bond
+        """
+        res = []
+        conf = mol.GetConformer(confId)
+        for i in range(mol.GetNumAtoms()):
+            atomi = mol.GetAtomWithIdx(i)
+            if atomi.GetAtomicNum() == 1:  
+                for j in range(mol.GetNumAtoms()):
+                    atomj = mol.GetAtomWithIdx(j)
+                    if atomj.GetAtomicNum() in eligibleAtoms:
+                        d = conf.GetAtomPosition(i).Distance(conf.GetAtomPosition(j))
+                        if d <= distTol:
+                            res.append((i, j, d))
+        return res
 
-        def number_of_conformers(num_of_rotatable_bonds):
-            if num_of_rotatable_bonds<=7:
-                number_of_conformers=50
-            elif num_of_rotatable_bonds>=8 and num_of_rotatable_bonds<=12:
-                number_of_conformers=200
-            else:
-                number_of_conformers=300
-            return number_of_conformers
-
-        def cluster_conformers(mol, threshold=1.5):
-            # print("Performing energy minimization and sorting conformers by energy...")
-            conformers = mol.GetConformers()
-            energies = []
-            for conf in conformers:
-                ff = AllChem.UFFGetMoleculeForceField(mol, confId=conf.GetId())
-                ff.Minimize()
-                energy = ff.CalcEnergy()
-                energies.append((conf.GetId(), energy))
-            energies.sort(key=lambda x: x[1])
-
-            # print(f"Lowest energy conformer ID: {energies[0][0]}, Energy: {energies[0][1]}")
-            
-            keep = [energies[0][0]]
-            
-            # print("Clustering conformers based on RMSD threshold...")
-            for index, (conf_id, energy) in enumerate(energies[1:]):
-                # print(f"Analyzing conformer {conf_id} with energy {energy}...")
-                unique = True
-                for kept_id in keep:
-                    # print(f"  Comparing against conformer {kept_id}...")
-                    rmsd = AllChem.AlignMol(mol, mol, prbCid=conf_id, refCid=kept_id)
-                    # print(f"  RMSD between conformer {conf_id} and {kept_id}: {rmsd}")
-                    if rmsd < threshold:
-                        unique = False
-                        # print(f"  Conformer {conf_id} is similar to conformer {kept_id} (RMSD: {rmsd}). Discarding.")
-                        break
-                if unique:
-                    keep.append(conf_id)
-                    # print(f"  Conformer {conf_id} is unique and kept (Energy: {energy}).")
-            
-            # print(f"Total unique conformers after clustering: {len(keep)}")
-            return keep
-
-
-
-        # print("Starting hydrogen bond analysis...")
+    def calc_rotatable_bonds(smiles):
         mol = Chem.MolFromSmiles(smiles)
-        mol = Chem.AddHs(mol)
-        num_rotatable_bonds = calc_rotatable_bonds(smiles)
-        num_conformers = number_of_conformers(num_rotatable_bonds)
-        # print(f"Generating {num_conformers} conformers...")
-        _ = AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, pruneRmsThresh=1, randomSeed=1)
-        
-        # print("Clustering conformers based on RMSD...")
-        keep = cluster_conformers(mol)
-        # print(f"{len(keep)} unique conformers identified after clustering.")
-        
-        hbond_lengths = []  
-        for confId in keep:
-            hbonds = find_intramolecular_hbonds(mol, confId=confId)
-            hbond_lengths.append(len(hbonds))  
-        
-        return max(hbond_lengths)-min(hbond_lengths)  
+        if mol is not None:  
+            return rdMolDescriptors.CalcNumRotatableBonds(mol)
+        else:
+            return None
 
-    df['IMHB_var'] = df['SMILES'].apply(IMHB_var)
+    def number_of_conformers(num_of_rotatable_bonds):
+        if num_of_rotatable_bonds<=7:
+            number_of_conformers=50
+        elif num_of_rotatable_bonds>=8 and num_of_rotatable_bonds<=12:
+            number_of_conformers=200
+        else:
+            number_of_conformers=300
+        return number_of_conformers
+
+    def cluster_conformers(mol, threshold=1.5):
+        # print("Performing energy minimization and sorting conformers by energy...")
+        conformers = mol.GetConformers()
+        energies = []
+        for conf in conformers:
+            ff = AllChem.UFFGetMoleculeForceField(mol, confId=conf.GetId())
+            ff.Minimize()
+            energy = ff.CalcEnergy()
+            energies.append((conf.GetId(), energy))
+        energies.sort(key=lambda x: x[1])
+
+        # print(f"Lowest energy conformer ID: {energies[0][0]}, Energy: {energies[0][1]}")
+        
+        keep = [energies[0][0]]
+        
+        # print("Clustering conformers based on RMSD threshold...")
+        for index, (conf_id, energy) in enumerate(energies[1:]):
+            # print(f"Analyzing conformer {conf_id} with energy {energy}...")
+            unique = True
+            for kept_id in keep:
+                # print(f"  Comparing against conformer {kept_id}...")
+                rmsd = AllChem.AlignMol(mol, mol, prbCid=conf_id, refCid=kept_id)
+                # print(f"  RMSD between conformer {conf_id} and {kept_id}: {rmsd}")
+                if rmsd < threshold:
+                    unique = False
+                    # print(f"  Conformer {conf_id} is similar to conformer {kept_id} (RMSD: {rmsd}). Discarding.")
+                    break
+            if unique:
+                keep.append(conf_id)
+                # print(f"  Conformer {conf_id} is unique and kept (Energy: {energy}).")
+        
+        # print(f"Total unique conformers after clustering: {len(keep)}")
+        return keep
+
+
+
+    # print("Starting hydrogen bond analysis...")
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.AddHs(mol)
+    num_rotatable_bonds = calc_rotatable_bonds(smiles)
+    num_conformers = number_of_conformers(num_rotatable_bonds)
+    # print(f"Generating {num_conformers} conformers...")
+    _ = AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, pruneRmsThresh=1, randomSeed=1)
+    
+    # print("Clustering conformers based on RMSD...")
+    keep = cluster_conformers(mol)
+    # print(f"{len(keep)} unique conformers identified after clustering.")
+    
+    hbond_lengths = []  
+    for confId in keep:
+        hbonds = find_intramolecular_hbonds(mol, confId=confId)
+        hbond_lengths.append(len(hbonds))  
+    
+    return max(hbond_lengths)-min(hbond_lengths) 
+
+def get_chameleonicity_like_descriptor(df):
+    results = parallelize_dataframe_computation(df, IMHB_var)
+    df['IMHB_var'] = results
     return df
