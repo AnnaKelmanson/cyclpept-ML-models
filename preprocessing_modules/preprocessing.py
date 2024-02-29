@@ -15,7 +15,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 def preprocess_peptide_data_basic():
     '''if there are duplicates, it takes the assay from the latest paper'''
-    df = pd.read_csv('/home/kelmanson/Desktop/LIAC/code/ML/cyclpept-ML-models/CycPeptMPDB_Peptide_Assay_PAMPA.csv')
+    df = pd.read_csv('/home/annaborisova/projects/cyclpept-ML-models/data/CycPeptMPDB_Peptide_Assay_PAMPA.csv')
     unique_smiles_df = df.sort_values('Year', ascending=False).drop_duplicates(subset='SMILES', keep='first')
     missing_detection_limits_df = unique_smiles_df[pd.isna(unique_smiles_df['Detection_Limit_1']) & pd.isna(unique_smiles_df['Detection_Limit_2'])]
     suspicious_rows_df = missing_detection_limits_df[missing_detection_limits_df["PAMPA"] == -10.0]
@@ -32,7 +32,7 @@ def preprocess_peptide_data_basic():
 
 def preprocess_peptide_data_advanced():
     '''if there are duplicates, it checks first std, if it is more than 1 it deletes the assay, if below it takes mean'''
-    df = pd.read_csv('/home/kelmanson/Desktop/LIAC/code/ML/cyclpept-ML-models/CycPeptMPDB_Peptide_Assay_PAMPA.csv')
+    df = pd.read_csv('/home/annaborisova/projects/cyclpept-ML-models/data/CycPeptMPDB_Peptide_Assay_PAMPA.csv')
     
     smiles_counts = df['SMILES'].value_counts()
     unique_smiles = smiles_counts[smiles_counts == 1].index

@@ -11,6 +11,11 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from rdkit.Chem import rdMolDescriptors
 from concurrent.futures import ProcessPoolExecutor
+from pandarallel import pandarallel
+from multiprocessing import Pool
+from rdkit import Chem
+from rdkit.Chem import AllChem, rdMolDescriptors
+import mapply
 
 
 def generate_morgan_count(df, smiles_col='SMILES', radius=2):
@@ -106,11 +111,11 @@ def add_molecular_descriptors(df, smiles_col='SMILES'):
     
     return result_df
 
-def parallelize_dataframe_computation(df, function, n_workers=4):
-    smiles_list = df['SMILES'].to_list()
-    with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        results = list(executor.map(function, smiles_list))
-    return results
+# def parallelize_dataframe_computation(df, function, n_workers=24):
+#     smiles_list = df['SMILES'].to_list()
+#     with ProcessPoolExecutor(max_workers=n_workers) as executor:
+#         results = list(executor.map(function, smiles_list))
+#     return results
 
 def IMHB_var(smiles):
     def find_intramolecular_hbonds(mol, confId=-1, eligibleAtoms=[7,8], distTol=2.5):
@@ -205,6 +210,9 @@ def IMHB_var(smiles):
     return max(hbond_lengths)-min(hbond_lengths) 
 
 def get_chameleonicity_like_descriptor(df):
-    results = parallelize_dataframe_computation(df, IMHB_var)
-    df['IMHB_var'] = results
+    pandarallel.initialize(progress_bar=True)
+    df['IMHB_var'] = df['SMILES'].parallel_apply(IMHB_var)
     return df
+
+
+
