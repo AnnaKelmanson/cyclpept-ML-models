@@ -63,32 +63,41 @@ def preprocess_peptide_data_advanced():
     return clean_combined_df
 
 
+# def cut_df(df):
+#     columns = ['CycPeptMPDB_ID',
+#     'Source',
+#     'Year',
+#     'Original_Name_in_Source_Literature',
+#     'Structurally_Unique_ID',
+#     'Same_Peptides_ID',
+#     'Same_Peptides_Source',
+#     'Same_Peptides_Permeability',
+#     'Same_Peptides_Assay',
+#     'SMILES',
+#     'HELM',
+#     'HELM_URL',
+#     'Sequence',
+#     'Sequence_LogP',
+#     'Sequence_TPSA',
+#     'Monomer_Length',
+#     'Monomer_Length_in_Main_Chain',
+#     'Molecule_Shape',
+#     'Permeability',
+#     'PAMPA',
+#     'Caco2',
+#     'MDCK',
+#     'RRCK',
+#     'Detection_Limit_1',
+#     'Detection_Limit_2']
+
+#     return df[columns]
+
 def cut_df(df):
-    columns = ['CycPeptMPDB_ID',
-    'Source',
-    'Year',
-    'Original_Name_in_Source_Literature',
-    'Structurally_Unique_ID',
-    'Same_Peptides_ID',
-    'Same_Peptides_Source',
-    'Same_Peptides_Permeability',
-    'Same_Peptides_Assay',
-    'SMILES',
-    'HELM',
-    'HELM_URL',
-    'Sequence',
-    'Sequence_LogP',
-    'Sequence_TPSA',
+    columns = ['SMILES',
     'Monomer_Length',
     'Monomer_Length_in_Main_Chain',
     'Molecule_Shape',
-    'Permeability',
-    'PAMPA',
-    'Caco2',
-    'MDCK',
-    'RRCK',
-    'Detection_Limit_1',
-    'Detection_Limit_2']
+    'PAMPA']
 
     return df[columns]
 
