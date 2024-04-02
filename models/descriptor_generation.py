@@ -12,6 +12,11 @@ from preprocessing import preprocess_peptide_data_advanced, cut_df
 from splitter import *
 from descriptors import *
 from rdkit.Chem import Descriptors
+from pathlib import Path
+models_dir = Path(__file__).parent
+root_dir = models_dir.parent
+model_path = root_dir / 'fitted_models' / 'random_forest_regressor_model.joblib'
+data_path = root_dir / 'data' / 'rf.csv'
 
 def cut_df(df):
     columns = ['SMILES', 'PAMPA']
@@ -35,4 +40,4 @@ def generate_descriptors(df):
 if __name__ == '__main__':
     df = cut_df(preprocess_peptide_data_advanced())
     df = generate_descriptors(df)
-    df.to_csv('/home/annaborisova/projects/cyclpept-ML-models/data/rf.csv')
+    df.to_csv(str(root_dir / 'data' / 'rf.csv'))

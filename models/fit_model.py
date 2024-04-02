@@ -5,6 +5,15 @@ from sklearn.ensemble import RandomForestRegressor
 import joblib
 from preparation_for_training import generation_fitting_sets
 
+from pathlib import Path
+
+# Assuming this file is directly inside the 'models' directory
+models_dir = Path(__file__).parent
+root_dir = models_dir.parent
+model_path = root_dir / 'fitted_models' / 'random_forest_regressor_model.joblib'
+data_path = root_dir / 'data' / 'rf.csv'
+
+
 def evaluate_model(clf, X_train, y_train, X_val, y_val):
     """
     Evaluates the RandomForestRegressor model on training and validation datasets.
@@ -37,7 +46,7 @@ def evaluate_model(clf, X_train, y_train, X_val, y_val):
 
 def fit_and_save_model(model_path):
     clf = RandomForestRegressor(n_estimators=100, random_state=42)
-    csv = '/home/annaborisova/projects/cyclpept-ML-models/data/rf.csv'
+    csv = data_path
     X_train, y_train, X_test, y_test, X_val, y_val = generation_fitting_sets(csv)
     clf.fit(X_train, y_train.values.ravel())
     joblib.dump(clf, model_path)
@@ -46,5 +55,4 @@ def fit_and_save_model(model_path):
 #loaded_clf = joblib.load('random_forest_regressor_model.joblib')
 
 if __name__ == '__main__':
-    model_path = '/home/annaborisova/projects/cyclpept-ML-models/fitted_models/random_forest_regressor_model.joblib'
     fit_and_save_model(model_path)

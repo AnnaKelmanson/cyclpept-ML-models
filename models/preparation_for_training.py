@@ -1,8 +1,15 @@
 import sys
 from pathlib import Path
 
-# Get the absolute path of the preprocessing_modules directory
-preprocessing_modules_path = '/home/annaborisova/projects/cyclpept-ML-models/preprocessing_modules'
+# Get the path of the current file (e.g., script or module)
+current_file_path = Path(__file__)
+
+# Assuming your file structure keeps 'preprocessing_modules' at the same level as 'models'
+# Get the root directory of your project (go up two levels from the current file)
+root_dir = current_file_path.parent.parent
+
+# Construct the path to the 'preprocessing_modules' directory
+preprocessing_modules_path = root_dir / 'preprocessing_modules'
 
 # Add this path to sys.path to make it available for imports
 sys.path.append(str(preprocessing_modules_path))
