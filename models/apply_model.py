@@ -1,6 +1,6 @@
 import joblib
 import pandas as pd
-from preparation_for_training import generate_input_for_model
+from .preparation_for_training import generate_input_for_model
 from pathlib import Path
 
 models_dir = Path(__file__).parent

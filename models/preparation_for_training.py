@@ -14,7 +14,7 @@ preprocessing_modules_path = root_dir / 'preprocessing_modules'
 # Add this path to sys.path to make it available for imports
 sys.path.append(str(preprocessing_modules_path))
 
-from descriptor_generation import generate_descriptors
+from .descriptor_generation import generate_descriptors
 from splitter import split_dataset_by_scaffold_and_similarity
 from descriptors import *
 from sklearn.preprocessing import LabelEncoder

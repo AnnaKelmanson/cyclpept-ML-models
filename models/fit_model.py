@@ -3,7 +3,7 @@ from sklearn.model_selection import cross_val_score
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 import joblib
-from preparation_for_training import generation_fitting_sets
+from .preparation_for_training import generation_fitting_sets
 
 from pathlib import Path
 
